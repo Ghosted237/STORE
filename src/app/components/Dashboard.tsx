@@ -6,8 +6,18 @@ import { Link } from 'react-router';
 import { useAuth } from '../context/AuthContext';
 
 export function Dashboard() {
-  const { items, getStats, sales, getSalesStats } = useInventory();
+  const { items, getStats, sales, getSalesStats, isLoading } = useInventory();
   const { hasRole } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
+        <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+        <p className="text-gray-500 dark:text-gray-400">Chargement des données...</p>
+      </div>
+    );
+  }
+
   const stats = getStats();
   const salesStats = getSalesStats();
 
