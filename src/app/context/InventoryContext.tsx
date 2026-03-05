@@ -1,198 +1,117 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { InventoryItem, Category, InventoryStats, Sale, SaleItem, SalesStats, Supplier, PurchaseOrder } from '../types/inventory';
+import { db } from '../firebase';
+import {
+  collection,
+  onSnapshot,
+  doc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  getDoc,
+  addDoc,
+  query,
+  orderBy,
+  writeBatch
+} from 'firebase/firestore';
 
 interface InventoryContextType {
   items: InventoryItem[];
   categories: Category[];
   sales: Sale[];
-  addItem: (item: Omit<InventoryItem, 'id' | 'lastUpdated'>) => void;
-  updateItem: (id: string, item: Partial<InventoryItem>) => void;
-  deleteItem: (id: string) => void;
-  addCategory: (category: Omit<Category, 'id'>) => void;
-  deleteCategory: (id: string) => void;
+  addItem: (item: Omit<InventoryItem, 'id' | 'lastUpdated'>) => Promise<void>;
+  updateItem: (id: string, item: Partial<InventoryItem>) => Promise<void>;
+  deleteItem: (id: string) => Promise<void>;
+  addCategory: (category: Omit<Category, 'id'>) => Promise<void>;
+  deleteCategory: (id: string) => Promise<void>;
   getStats: () => InventoryStats;
   getItemById: (id: string) => InventoryItem | undefined;
-  addSale: (sale: Omit<Sale, 'id' | 'date'>) => Sale;
-  clearSales: () => void;
+  addSale: (sale: Omit<Sale, 'id' | 'date'>) => Promise<Sale>;
+  clearSales: () => Promise<void>;
   getSalesStats: () => SalesStats;
   suppliers: Supplier[];
-  addSupplier: (supplier: Omit<Supplier, 'id'>) => void;
-  updateSupplier: (id: string, supplier: Partial<Supplier>) => void;
-  deleteSupplier: (id: string) => void;
+  addSupplier: (supplier: Omit<Supplier, 'id'>) => Promise<void>;
+  updateSupplier: (id: string, supplier: Partial<Supplier>) => Promise<void>;
+  deleteSupplier: (id: string) => Promise<void>;
   getSupplierById: (id: string) => Supplier | undefined;
   purchaseOrders: PurchaseOrder[];
-  addPurchaseOrder: (purchaseOrder: Omit<PurchaseOrder, 'id' | 'date'>) => void;
-  updatePurchaseOrder: (id: string, purchaseOrder: Partial<PurchaseOrder>) => void;
-  receivePurchaseOrder: (id: string) => void;
-  deletePurchaseOrder: (id: string) => void;
+  addPurchaseOrder: (purchaseOrder: Omit<PurchaseOrder, 'id' | 'date'>) => Promise<void>;
+  updatePurchaseOrder: (id: string, purchaseOrder: Partial<PurchaseOrder>) => Promise<void>;
+  receivePurchaseOrder: (id: string) => Promise<void>;
+  deletePurchaseOrder: (id: string) => Promise<void>;
   getSaleById: (id: string) => Sale | undefined;
+  isLoading: boolean;
 }
 
 const InventoryContext = createContext<InventoryContextType | undefined>(undefined);
 
-const STORAGE_KEY_ITEMS = 'inventory_items';
-const STORAGE_KEY_CATEGORIES = 'inventory_categories';
-const STORAGE_KEY_SALES = 'inventory_sales';
-const STORAGE_KEY_SUPPLIERS = 'inventory_suppliers';
-const STORAGE_KEY_PURCHASE_ORDERS = 'inventory_purchase_orders';
-
-// Données initiales
-const initialCategories: Category[] = [
-  { id: '1', name: 'Électronique', description: 'Appareils et composants électroniques' },
-  { id: '2', name: 'Mobilier', description: 'Meubles de bureau' },
-  { id: '3', name: 'Fournitures', description: 'Fournitures de bureau' },
-  { id: '4', name: 'Outillage', description: 'Outils et équipements' },
-];
-
-const initialItems: InventoryItem[] = [
-  {
-    id: '1',
-    name: 'Ordinateur portable Dell XPS 15',
-    description: 'Intel i7, 16GB RAM, 512GB SSD',
-    category: 'Électronique',
-    quantity: 12,
-    minQuantity: 5,
-    price: 1299.99,
-    sku: 'DELL-XPS15-001',
-    supplier: 'Dell Inc.',
-    lastUpdated: new Date().toISOString(),
-  },
-  {
-    id: '2',
-    name: 'Chaise de bureau ergonomique',
-    description: 'Chaise ergonomique avec support lombaire',
-    category: 'Mobilier',
-    quantity: 3,
-    minQuantity: 10,
-    price: 249.99,
-    sku: 'CHAIR-ERG-001',
-    supplier: 'Office Furniture Co.',
-    lastUpdated: new Date().toISOString(),
-  },
-  {
-    id: '3',
-    name: 'Ramette papier A4',
-    description: 'Papier blanc 80g/m², 500 feuilles',
-    category: 'Fournitures',
-    quantity: 45,
-    minQuantity: 20,
-    price: 4.99,
-    sku: 'PAPER-A4-500',
-    supplier: 'Paper World',
-    lastUpdated: new Date().toISOString(),
-  },
-  {
-    id: '4',
-    name: 'Souris sans fil Logitech',
-    description: 'Souris ergonomique 2.4GHz',
-    category: 'Électronique',
-    quantity: 8,
-    minQuantity: 15,
-    price: 29.99,
-    sku: 'MOUSE-LOG-001',
-    supplier: 'Logitech',
-    lastUpdated: new Date().toISOString(),
-  },
-  {
-    id: '5',
-    name: 'Perceuse sans fil',
-    description: 'Perceuse 18V avec batterie lithium',
-    category: 'Outillage',
-    quantity: 6,
-    minQuantity: 3,
-    price: 159.99,
-    sku: 'DRILL-18V-001',
-    supplier: 'Tools Pro',
-    lastUpdated: new Date().toISOString(),
-  },
-];
-
 export function InventoryProvider({ children }: { children: ReactNode }) {
-  const [items, setItems] = useState<InventoryItem[]>(() => {
-    const stored = localStorage.getItem(STORAGE_KEY_ITEMS);
-    return stored ? JSON.parse(stored) : initialItems;
-  });
+  const [items, setItems] = useState<InventoryItem[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [sales, setSales] = useState<Sale[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const [categories, setCategories] = useState<Category[]>(() => {
-    const stored = localStorage.getItem(STORAGE_KEY_CATEGORIES);
-    return stored ? JSON.parse(stored) : initialCategories;
-  });
-
-  const [sales, setSales] = useState<Sale[]>(() => {
-    const stored = localStorage.getItem(STORAGE_KEY_SALES);
-    return stored ? JSON.parse(stored) : [];
-  });
-
-  const [suppliers, setSuppliers] = useState<Supplier[]>(() => {
-    const stored = localStorage.getItem(STORAGE_KEY_SUPPLIERS);
-    return stored ? JSON.parse(stored) : [];
-  });
-
-  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(() => {
-    const stored = localStorage.getItem(STORAGE_KEY_PURCHASE_ORDERS);
-    return stored ? JSON.parse(stored) : [];
-  });
-
+  // Initialisation en temps réel de toutes les collections
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(items));
-  }, [items]);
+    const unsubscribes = [
+      onSnapshot(collection(db, 'items'), (snapshot) => {
+        setItems(snapshot.docs.map(doc => ({ ...doc.data() as InventoryItem, id: doc.id })));
+      }),
+      onSnapshot(collection(db, 'categories'), (snapshot) => {
+        setCategories(snapshot.docs.map(doc => ({ ...doc.data() as Category, id: doc.id })));
+      }),
+      onSnapshot(query(collection(db, 'sales'), orderBy('date', 'desc')), (snapshot) => {
+        setSales(snapshot.docs.map(doc => ({ ...doc.data() as Sale, id: doc.id })));
+      }),
+      onSnapshot(collection(db, 'suppliers'), (snapshot) => {
+        setSuppliers(snapshot.docs.map(doc => ({ ...doc.data() as Supplier, id: doc.id })));
+      }),
+      onSnapshot(query(collection(db, 'purchaseOrders'), orderBy('orderDate', 'desc')), (snapshot) => {
+        setPurchaseOrders(snapshot.docs.map(doc => ({ ...doc.data() as PurchaseOrder, id: doc.id })));
+      }),
+    ];
 
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_CATEGORIES, JSON.stringify(categories));
-  }, [categories]);
+    setIsLoading(false);
+    return () => unsubscribes.forEach(unsub => unsub());
+  }, []);
 
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_SALES, JSON.stringify(sales));
-  }, [sales]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_SUPPLIERS, JSON.stringify(suppliers));
-  }, [suppliers]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_PURCHASE_ORDERS, JSON.stringify(purchaseOrders));
-  }, [purchaseOrders]);
-
-  const addItem = (item: Omit<InventoryItem, 'id' | 'lastUpdated'>) => {
-    const newItem: InventoryItem = {
+  const addItem = async (item: Omit<InventoryItem, 'id' | 'lastUpdated'>) => {
+    const id = Date.now().toString();
+    const newItem = {
       ...item,
-      id: Date.now().toString(),
+      id,
       lastUpdated: new Date().toISOString(),
     };
-    setItems([...items, newItem]);
+    await setDoc(doc(db, 'items', id), newItem);
   };
 
-  const updateItem = (id: string, updates: Partial<InventoryItem>) => {
-    setItems(items.map(item =>
-      item.id === id
-        ? { ...item, ...updates, lastUpdated: new Date().toISOString() }
-        : item
-    ));
+  const updateItem = async (id: string, updates: Partial<InventoryItem>) => {
+    await updateDoc(doc(db, 'items', id), {
+      ...updates,
+      lastUpdated: new Date().toISOString(),
+    });
   };
 
-  const deleteItem = (id: string) => {
-    setItems(items.filter(item => item.id !== id));
+  const deleteItem = async (id: string) => {
+    await deleteDoc(doc(db, 'items', id));
   };
 
-  const addCategory = (category: Omit<Category, 'id'>) => {
-    const newCategory: Category = {
-      ...category,
-      id: Date.now().toString(),
-    };
-    setCategories([...categories, newCategory]);
+  const addCategory = async (category: Omit<Category, 'id'>) => {
+    const id = Date.now().toString();
+    await setDoc(doc(db, 'categories', id), { ...category, id });
   };
 
-  const deleteCategory = (id: string) => {
+  const deleteCategory = async (id: string) => {
     const categoryToDelete = categories.find(cat => cat.id === id);
     if (categoryToDelete) {
-      // Vérifier si des items utilisent cette catégorie
       const itemsInCategory = items.filter(item => item.category === categoryToDelete.name);
       if (itemsInCategory.length > 0) {
-        alert(`Impossible de supprimer la catégorie "${categoryToDelete.name}" car elle contient ${itemsInCategory.length} article(s).`);
-        return;
+        throw new Error(`Impossible de supprimer la catégorie "${categoryToDelete.name}" car elle contient ${itemsInCategory.length} article(s).`);
       }
     }
-    setCategories(categories.filter(cat => cat.id !== id));
+    await deleteDoc(doc(db, 'categories', id));
   };
 
   const getStats = (): InventoryStats => {
@@ -212,33 +131,38 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     return items.find(item => item.id === id);
   };
 
-  const addSale = (sale: Omit<Sale, 'id' | 'date'>) => {
-    const newSale: Sale = {
-      ...sale,
-      id: Date.now().toString(),
-      date: new Date().toISOString(),
-    };
+  const addSale = async (sale: Omit<Sale, 'id' | 'date'>) => {
+    const id = Date.now().toString();
+    const date = new Date().toISOString();
+    const newSale: Sale = { ...sale, id, date };
 
-    // Mettre à jour les quantités en stock
-    const updatedItems = [...items];
+    const batch = writeBatch(db);
+
+    // Enregistrer la vente
+    batch.set(doc(db, 'sales', id), newSale);
+
+    // Mettre à jour les stocks
     sale.items.forEach(saleItem => {
-      const itemIndex = updatedItems.findIndex(item => item.id === saleItem.itemId);
-      if (itemIndex !== -1) {
-        updatedItems[itemIndex] = {
-          ...updatedItems[itemIndex],
-          quantity: updatedItems[itemIndex].quantity - saleItem.quantity,
-          lastUpdated: new Date().toISOString(),
-        };
+      const itemRef = doc(db, 'items', saleItem.itemId);
+      const currentItem = items.find(i => i.id === saleItem.itemId);
+      if (currentItem) {
+        batch.update(itemRef, {
+          quantity: currentItem.quantity - saleItem.quantity,
+          lastUpdated: date
+        });
       }
     });
 
-    setItems(updatedItems);
-    setSales([newSale, ...sales]);
+    await batch.commit();
     return newSale;
   };
 
-  const clearSales = () => {
-    setSales([]);
+  const clearSales = async () => {
+    const batch = writeBatch(db);
+    sales.forEach(sale => {
+      batch.delete(doc(db, 'sales', sale.id));
+    });
+    await batch.commit();
   };
 
   const getSalesStats = (): SalesStats => {
@@ -261,85 +185,62 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     };
   };
 
-  const addSupplier = (supplier: Omit<Supplier, 'id'>) => {
-    const newSupplier: Supplier = {
-      ...supplier,
-      id: Date.now().toString(),
-    };
-    setSuppliers([...suppliers, newSupplier]);
+  const addSupplier = async (supplier: Omit<Supplier, 'id'>) => {
+    const id = Date.now().toString();
+    await setDoc(doc(db, 'suppliers', id), { ...supplier, id });
   };
 
-  const updateSupplier = (id: string, updates: Partial<Supplier>) => {
-    setSuppliers(suppliers.map(supplier =>
-      supplier.id === id
-        ? { ...supplier, ...updates }
-        : supplier
-    ));
+  const updateSupplier = async (id: string, updates: Partial<Supplier>) => {
+    await updateDoc(doc(db, 'suppliers', id), updates);
   };
 
-  const deleteSupplier = (id: string) => {
-    setSuppliers(suppliers.filter(supplier => supplier.id !== id));
+  const deleteSupplier = async (id: string) => {
+    await deleteDoc(doc(db, 'suppliers', id));
   };
 
   const getSupplierById = (id: string): Supplier | undefined => {
     return suppliers.find(supplier => supplier.id === id);
   };
 
-  const addPurchaseOrder = (purchaseOrder: Omit<PurchaseOrder, 'id' | 'date'>) => {
-    const newPurchaseOrder: PurchaseOrder = {
-      ...purchaseOrder,
-      id: Date.now().toString(),
-      orderDate: new Date().toISOString(),
-    };
+  const addPurchaseOrder = async (purchaseOrder: Omit<PurchaseOrder, 'id' | 'date'>) => {
+    const id = Date.now().toString();
+    const orderDate = new Date().toISOString();
+    const newPO = { ...purchaseOrder, id, orderDate };
 
-    // Mettre à jour les quantités en stock
-    const updatedItems = [...items];
-    purchaseOrder.items.forEach(purchaseItem => {
-      const itemIndex = updatedItems.findIndex(item => item.id === purchaseItem.itemId);
-      if (itemIndex !== -1) {
-        updatedItems[itemIndex] = {
-          ...updatedItems[itemIndex],
-          quantity: updatedItems[itemIndex].quantity + purchaseItem.quantity,
-          lastUpdated: new Date().toISOString(),
-        };
-      }
-    });
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'purchaseOrders', id), newPO);
 
-    setItems(updatedItems);
-    setPurchaseOrders([newPurchaseOrder, ...purchaseOrders]);
+    await batch.commit();
   };
 
-  const updatePurchaseOrder = (id: string, updates: Partial<PurchaseOrder>) => {
-    setPurchaseOrders(purchaseOrders.map(purchaseOrder =>
-      purchaseOrder.id === id
-        ? { ...purchaseOrder, ...updates }
-        : purchaseOrder
-    ));
+  const updatePurchaseOrder = async (id: string, updates: Partial<PurchaseOrder>) => {
+    await updateDoc(doc(db, 'purchaseOrders', id), updates);
   };
 
-  const receivePurchaseOrder = (id: string) => {
+  const receivePurchaseOrder = async (id: string) => {
     const purchaseOrder = purchaseOrders.find(po => po.id === id);
     if (purchaseOrder) {
-      // Mettre à jour les quantités en stock
-      const updatedItems = [...items];
+      const batch = writeBatch(db);
+      const now = new Date().toISOString();
+
       purchaseOrder.items.forEach(purchaseItem => {
-        const itemIndex = updatedItems.findIndex(item => item.id === purchaseItem.itemId);
-        if (itemIndex !== -1) {
-          updatedItems[itemIndex] = {
-            ...updatedItems[itemIndex],
-            quantity: updatedItems[itemIndex].quantity + purchaseItem.quantity,
-            lastUpdated: new Date().toISOString(),
-          };
+        const itemRef = doc(db, 'items', purchaseItem.itemId);
+        const currentItem = items.find(i => i.id === purchaseItem.itemId);
+        if (currentItem) {
+          batch.update(itemRef, {
+            quantity: currentItem.quantity + purchaseItem.quantity,
+            lastUpdated: now
+          });
         }
       });
 
-      setItems(updatedItems);
-      setPurchaseOrders(purchaseOrders.filter(po => po.id !== id));
+      batch.delete(doc(db, 'purchaseOrders', id));
+      await batch.commit();
     }
   };
 
-  const deletePurchaseOrder = (id: string) => {
-    setPurchaseOrders(purchaseOrders.filter(purchaseOrder => purchaseOrder.id !== id));
+  const deletePurchaseOrder = async (id: string) => {
+    await deleteDoc(doc(db, 'purchaseOrders', id));
   };
 
   const getSaleById = (id: string): Sale | undefined => {
@@ -373,6 +274,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         receivePurchaseOrder,
         deletePurchaseOrder,
         getSaleById,
+        isLoading,
       }}
     >
       {children}

@@ -34,29 +34,52 @@ import { toast } from 'sonner';
 import { PurchaseOrder } from '../types/inventory';
 
 export function PurchaseOrders() {
-  const { purchaseOrders, receivePurchaseOrder, updatePurchaseOrder, suppliers } = useInventory();
+  const { purchaseOrders, receivePurchaseOrder, updatePurchaseOrder, suppliers, isLoading } = useInventory();
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedOrder, setSelectedOrder] = useState<PurchaseOrder | null>(null);
   const [receiveId, setReceiveId] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const filteredOrders = purchaseOrders.filter(order =>
     order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
     order.supplierName.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleReceive = () => {
+  const handleReceive = async () => {
     if (receiveId) {
-      receivePurchaseOrder(receiveId);
-      toast.success('Commande réceptionnée avec succès');
-      setReceiveId(null);
+      setIsSubmitting(true);
+      try {
+        await receivePurchaseOrder(receiveId);
+        toast.success('Commande réceptionnée avec succès');
+        setReceiveId(null);
+      } catch (error) {
+        toast.error('Erreur lors de la réception');
+      } finally {
+        setIsSubmitting(false);
+      }
     }
   };
 
-  const handleCancel = (orderId: string) => {
-    updatePurchaseOrder(orderId, { status: 'cancelled' });
-    toast.success('Commande annulée');
+  const handleCancel = async (orderId: string) => {
+    if (confirm('Voulez-vous vraiment annuler cette commande ?')) {
+      try {
+        await updatePurchaseOrder(orderId, { status: 'cancelled' });
+        toast.success('Commande annulée');
+      } catch (error) {
+        toast.error('Erreur lors de l\'annulation');
+      }
+    }
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
+        <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+        <p className="text-gray-500 dark:text-gray-400">Chargement des commandes...</p>
+      </div>
+    );
+  }
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -287,9 +310,16 @@ export function PurchaseOrders() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Annuler</AlertDialogCancel>
-            <AlertDialogAction onClick={handleReceive} className="bg-green-600 hover:bg-green-700">
-              Réceptionner
+            <AlertDialogCancel disabled={isSubmitting}>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                handleReceive();
+              }}
+              className="bg-green-600 hover:bg-green-700"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? 'Traitement...' : 'Réceptionner'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

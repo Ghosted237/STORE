@@ -46,7 +46,9 @@ export function ItemForm() {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!formData.name || !formData.category || !formData.sku) {
@@ -54,26 +56,33 @@ export function ItemForm() {
       return;
     }
 
-    const itemData = {
-      name: formData.name,
-      description: formData.description,
-      category: formData.category,
-      quantity: parseFloat(formData.quantity) || 0,
-      minQuantity: parseFloat(formData.minQuantity) || 0,
-      price: parseFloat(formData.price) || 0,
-      sku: formData.sku,
-      supplier: formData.supplier,
-    };
+    setIsSubmitting(true);
+    try {
+      const itemData = {
+        name: formData.name,
+        description: formData.description,
+        category: formData.category,
+        quantity: parseFloat(formData.quantity) || 0,
+        minQuantity: parseFloat(formData.minQuantity) || 0,
+        price: parseFloat(formData.price) || 0,
+        sku: formData.sku,
+        supplier: formData.supplier,
+      };
 
-    if (isEditing) {
-      updateItem(id, itemData);
-      toast.success('Article mis à jour avec succès');
-    } else {
-      addItem(itemData);
-      toast.success('Article ajouté avec succès');
+      if (isEditing) {
+        await updateItem(id!, itemData);
+        toast.success('Article mis à jour avec succès');
+      } else {
+        await addItem(itemData);
+        toast.success('Article ajouté avec succès');
+      }
+
+      navigate('/inventory');
+    } catch (error) {
+      toast.error('Erreur lors de l\'enregistrement');
+    } finally {
+      setIsSubmitting(false);
     }
-
-    navigate('/inventory');
   };
 
   return (
@@ -203,8 +212,8 @@ export function ItemForm() {
             </div>
 
             <div className="flex gap-4 pt-4">
-              <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
-                {isEditing ? 'Mettre à jour' : 'Ajouter'}
+              <Button type="submit" className="bg-blue-600 hover:bg-blue-700" disabled={isSubmitting}>
+                {isSubmitting ? 'Enregistrement...' : (isEditing ? 'Mettre à jour' : 'Ajouter')}
               </Button>
               <Button
                 type="button"

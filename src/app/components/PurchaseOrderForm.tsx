@@ -69,7 +69,9 @@ export function PurchaseOrderForm() {
   const tax = subtotal * TAX_RATE;
   const total = subtotal + tax;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!supplierId) {
@@ -94,20 +96,27 @@ export function PurchaseOrderForm() {
       return;
     }
 
-    addPurchaseOrder({
-      supplierId,
-      supplierName: supplier.name,
-      items: orderItems,
-      subtotal,
-      tax,
-      total,
-      status: 'pending',
-      notes: notes || undefined,
-      orderDate: new Date().toISOString(),
-    });
+    setIsSubmitting(true);
+    try {
+      await addPurchaseOrder({
+        supplierId,
+        supplierName: supplier.name,
+        items: orderItems,
+        subtotal,
+        tax,
+        total,
+        status: 'pending',
+        notes: notes || undefined,
+        orderDate: new Date().toISOString(),
+      });
 
-    toast.success('Commande créée avec succès');
-    navigate('/purchase-orders');
+      toast.success('Commande créée avec succès');
+      navigate('/purchase-orders');
+    } catch (error) {
+      toast.error('Erreur lors de la création de la commande');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -278,8 +287,8 @@ export function PurchaseOrderForm() {
 
             {/* Actions */}
             <div className="flex gap-4 pt-4">
-              <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
-                Créer la commande
+              <Button type="submit" className="bg-blue-600 hover:bg-blue-700" disabled={isSubmitting}>
+                {isSubmitting ? 'Création...' : 'Créer la commande'}
               </Button>
               <Button
                 type="button"

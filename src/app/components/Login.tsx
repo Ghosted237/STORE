@@ -16,13 +16,12 @@ export function Login() {
     const [password, setPassword] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
 
-        // Simuler un léger délai pour l'expérience utilisateur
-        setTimeout(() => {
-            const success = login(username, password);
+        try {
+            const success = await login(username, password);
             if (success) {
                 toast.success(`Bienvenue, ${username} !`);
                 navigate('/');
@@ -30,7 +29,10 @@ export function Login() {
                 toast.error('Identifiants incorrects');
                 setIsLoading(false);
             }
-        }, 800);
+        } catch (error) {
+            toast.error('Erreur lors de la connexion');
+            setIsLoading(false);
+        }
     };
 
     return (

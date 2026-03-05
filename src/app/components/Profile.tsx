@@ -14,7 +14,7 @@ export function Profile() {
     const [confirmPassword, setConfirmPassword] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
         if (password && password !== confirmPassword) {
@@ -24,21 +24,23 @@ export function Profile() {
 
         setIsSubmitting(true);
 
-        // Simuler un délai
-        setTimeout(() => {
+        try {
             const updates: any = { name };
             if (password) {
                 updates.password = password;
             }
 
             if (user) {
-                updateUser(user.username, updates);
+                await updateUser(user.username, updates);
                 toast.success('Profil mis à jour avec succès');
                 setPassword('');
                 setConfirmPassword('');
             }
+        } catch (error) {
+            toast.error('Erreur lors de la mise à jour');
+        } finally {
             setIsSubmitting(false);
-        }, 600);
+        }
     };
 
     if (!user) return null;

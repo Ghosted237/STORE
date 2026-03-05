@@ -40,45 +40,53 @@ export function UserManagement() {
         setIsModalOpen(true);
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (editingUser) {
-            // Pour une modification, on ne change le password que s'il est renseigné
-            const updates: Partial<User> = {
-                name: formData.name,
-                role: formData.role,
-            };
-            if (formData.password) {
-                updates.password = formData.password;
+        try {
+            if (editingUser) {
+                // Pour une modification, on ne change le password que s'il est renseigné
+                const updates: Partial<User> = {
+                    name: formData.name,
+                    role: formData.role,
+                };
+                if (formData.password) {
+                    updates.password = formData.password;
+                }
+                await updateUser(editingUser.username, updates);
+                toast.success('Utilisateur mis à jour');
+            } else {
+                // Pour un ajout
+                if (!formData.password) {
+                    toast.error('Le mot de passe est obligatoire pour un nouvel utilisateur');
+                    return;
+                }
+                await addUser({
+                    username: formData.username,
+                    name: formData.name,
+                    role: formData.role,
+                    password: formData.password,
+                });
+                toast.success('Utilisateur ajouté');
             }
-            updateUser(editingUser.username, updates);
-            toast.success('Utilisateur mis à jour');
-        } else {
-            // Pour un ajout
-            if (!formData.password) {
-                toast.error('Le mot de passe est obligatoire pour un nouvel utilisateur');
-                return;
-            }
-            addUser({
-                username: formData.username,
-                name: formData.name,
-                role: formData.role,
-                password: formData.password,
-            });
-            toast.success('Utilisateur ajouté');
+            setIsModalOpen(false);
+        } catch (error) {
+            toast.error('Erreur lors de l\'enregistrement');
         }
-        setIsModalOpen(false);
     };
 
-    const handleDelete = (username: string) => {
+    const handleDelete = async (username: string) => {
         if (username === currentUser?.username) {
             toast.error('Vous ne pouvez pas supprimer votre propre compte');
             return;
         }
         if (confirm(`Êtes-vous sûr de vouloir supprimer ${username} ?`)) {
-            deleteUser(username);
-            toast.success('Utilisateur supprimé');
+            try {
+                await deleteUser(username);
+                toast.success('Utilisateur supprimé');
+            } catch (error) {
+                toast.error('Erreur lors de la suppression');
+            }
         }
     };
 

@@ -101,47 +101,63 @@ export function PointOfSale() {
   const tax = subtotal * TAX_RATE;
   const total = subtotal + tax;
 
-  const handleCheckout = () => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleCheckout = async () => {
     if (cart.length === 0) {
       toast.error('Le panier est vide');
       return;
     }
 
-    addSale({
-      items: cart,
-      subtotal,
-      tax,
-      total,
-      paymentMethod,
-      customerName: customerName || undefined,
-    });
+    setIsSubmitting(true);
+    try {
+      await addSale({
+        items: cart,
+        subtotal,
+        tax,
+        total,
+        paymentMethod,
+        customerName: customerName || undefined,
+      });
 
-    toast.success('Vente enregistrée avec succès');
-    setCart([]);
-    setCustomerName('');
-    setSearchTerm('');
+      toast.success('Vente enregistrée avec succès');
+      setCart([]);
+      setCustomerName('');
+      setSearchTerm('');
+    } catch (error) {
+      toast.error('Erreur lors de l\'enregistrement de la vente');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleCheckoutAndPrint = () => {
+  const handleCheckoutAndPrint = async () => {
     if (cart.length === 0) {
       toast.error('Le panier est vide');
       return;
     }
 
-    const newSale = addSale({
-      items: cart,
-      subtotal,
-      tax,
-      total,
-      paymentMethod,
-      customerName: customerName || undefined,
-    });
+    setIsSubmitting(true);
+    try {
+      const newSale = await addSale({
+        items: cart,
+        subtotal,
+        tax,
+        total,
+        paymentMethod,
+        customerName: customerName || undefined,
+      });
 
-    toast.success('Vente enregistrée avec succès');
-    setCart([]);
-    setCustomerName('');
-    setSearchTerm('');
-    setPrintSale(newSale);
+      toast.success('Vente enregistrée avec succès');
+      setCart([]);
+      setCustomerName('');
+      setSearchTerm('');
+      setPrintSale(newSale);
+    } catch (error) {
+      toast.error('Erreur lors de l\'enregistrement de la vente');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const clearCart = () => {
@@ -343,14 +359,16 @@ export function PointOfSale() {
                   <Button
                     onClick={handleCheckoutAndPrint}
                     className="w-full bg-blue-600 hover:bg-blue-700"
+                    disabled={isSubmitting}
                   >
-                    Encaisser et Imprimer
+                    {isSubmitting ? 'Traitement...' : 'Encaisser et Imprimer'}
                   </Button>
                   <Button
                     onClick={handleCheckout}
                     className="w-full bg-green-600 hover:bg-green-700"
+                    disabled={isSubmitting}
                   >
-                    Encaisser uniquement
+                    {isSubmitting ? 'Traitement...' : 'Encaisser uniquement'}
                   </Button>
                   <Button
                     onClick={clearCart}

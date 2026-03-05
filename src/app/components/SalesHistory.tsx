@@ -26,12 +26,13 @@ import { Sale } from '../types/inventory';
 import { InvoicePrint } from './InvoicePrint';
 
 export function SalesHistory() {
-  const { sales, clearSales } = useInventory();
+  const { sales, clearSales, isLoading } = useInventory();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
   const [printSale, setPrintSale] = useState<Sale | null>(null);
   const [isClearHistoryDialogOpen, setIsClearHistoryDialogOpen] = useState(false);
   const [adminPassword, setAdminPassword] = useState('');
+  const [isClearing, setIsClearing] = useState(false);
 
   const filteredSales = sales.filter(sale =>
     sale.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -62,7 +63,6 @@ export function SalesHistory() {
   };
 
   const handleExportExcel = () => {
-    // Transformer les données pour le fichier Excel
     const dataToExport = filteredSales.map(sale => ({
       'N° Vente': sale.id.slice(-6),
       'Date': new Date(sale.date).toLocaleDateString('fr-FR', {
@@ -80,47 +80,52 @@ export function SalesHistory() {
       'Total (XAF)': sale.total,
     }));
 
-    // Créer une feuille de calcul
     const ws = XLSX.utils.json_to_sheet(dataToExport);
-
-    // Ajuster la largeur des colonnes
     const wscols = [
-      { wch: 15 }, // N° Vente
-      { wch: 20 }, // Date
-      { wch: 25 }, // Client
-      { wch: 15 }, // Articles
-      { wch: 20 }, // Paiement
-      { wch: 15 }, // Sous-total
-      { wch: 15 }, // TVA
-      { wch: 15 }, // Total
+      { wch: 15 }, { wch: 20 }, { wch: 25 }, { wch: 15 },
+      { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 15 },
     ];
     ws['!cols'] = wscols;
 
-    // Créer un classeur et ajouter la feuille
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Historique_Ventes");
 
-    // Générer le fichier et déclencher le téléchargement
     const dateStr = new Date().toISOString().split('T')[0];
     XLSX.writeFile(wb, `ventes_store_${dateStr}.xlsx`);
   };
 
-  const handleClearHistory = () => {
+  const handleClearHistory = async () => {
     if (adminPassword !== 'admin123') {
       toast.error('Mot de passe administrateur incorrect');
       return;
     }
 
-    clearSales();
-    setIsClearHistoryDialogOpen(false);
-    setAdminPassword('');
-    toast.success('Historique des ventes réinitialisé avec succès');
+    setIsClearing(true);
+    try {
+      await clearSales();
+      setIsClearHistoryDialogOpen(false);
+      setAdminPassword('');
+      toast.success('Historique des ventes réinitialisé avec succès');
+    } catch (error) {
+      toast.error('Erreur lors de la réinitialisation');
+    } finally {
+      setIsClearing(false);
+    }
   };
 
   const closeClearDialog = () => {
     setIsClearHistoryDialogOpen(false);
     setAdminPassword('');
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
+        <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+        <p className="text-gray-500 dark:text-gray-400">Chargement de l'historique...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -389,9 +394,9 @@ export function SalesHistory() {
             <Button
               variant="destructive"
               onClick={handleClearHistory}
-              disabled={!adminPassword}
+              disabled={!adminPassword || isClearing}
             >
-              Oui, réinitialiser
+              {isClearing ? 'Réinitialisation...' : 'Oui, réinitialiser'}
             </Button>
           </div>
         </DialogContent>

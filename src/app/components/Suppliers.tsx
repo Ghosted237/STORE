@@ -46,6 +46,9 @@ export function Suppliers() {
     supplier.contactPerson.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const handleOpenDialog = (supplier?: Supplier) => {
     if (supplier) {
       setEditingSupplier(supplier);
@@ -71,7 +74,7 @@ export function Suppliers() {
     setShowDialog(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!formData.name || !formData.email || !formData.phone) {
@@ -79,22 +82,38 @@ export function Suppliers() {
       return;
     }
 
-    if (editingSupplier) {
-      updateSupplier(editingSupplier.id, formData);
-      toast.success('Fournisseur mis à jour avec succès');
-    } else {
-      addSupplier(formData);
-      toast.success('Fournisseur ajouté avec succès');
+    setIsSubmitting(true);
+    try {
+      if (editingSupplier) {
+        await updateSupplier(editingSupplier.id, formData);
+        toast.success('Fournisseur mis à jour avec succès');
+      } else {
+        await addSupplier({
+          ...formData,
+          createdAt: new Date().toISOString(),
+        });
+        toast.success('Fournisseur ajouté avec succès');
+      }
+      setShowDialog(false);
+    } catch (error) {
+      toast.error('Erreur lors de l\'enregistrement');
+    } finally {
+      setIsSubmitting(false);
     }
-
-    setShowDialog(false);
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (deleteId) {
-      deleteSupplier(deleteId);
-      setDeleteId(null);
-      toast.success('Fournisseur supprimé avec succès');
+      setIsDeleting(true);
+      try {
+        await deleteSupplier(deleteId);
+        setDeleteId(null);
+        toast.success('Fournisseur supprimé avec succès');
+      } catch (error) {
+        toast.error('Erreur lors de la suppression');
+      } finally {
+        setIsDeleting(false);
+      }
     }
   };
 
@@ -280,8 +299,8 @@ export function Suppliers() {
             </div>
 
             <div className="flex gap-4 pt-4">
-              <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
-                {editingSupplier ? 'Mettre à jour' : 'Ajouter'}
+              <Button type="submit" className="bg-blue-600 hover:bg-blue-700" disabled={isSubmitting}>
+                {isSubmitting ? 'Enregistrement...' : (editingSupplier ? 'Mettre à jour' : 'Ajouter')}
               </Button>
               <Button
                 type="button"
@@ -305,9 +324,16 @@ export function Suppliers() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Annuler</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">
-              Supprimer
+            <AlertDialogCancel disabled={isDeleting}>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                handleDelete();
+              }}
+              className="bg-red-600 hover:bg-red-700"
+              disabled={isDeleting}
+            >
+              {isDeleting ? 'Suppression...' : 'Supprimer'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

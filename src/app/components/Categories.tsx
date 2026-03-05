@@ -27,9 +27,12 @@ export function Categories() {
     description: '',
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!formData.name) {
       toast.error('Le nom de la catégorie est obligatoire');
       return;
@@ -41,17 +44,31 @@ export function Categories() {
       return;
     }
 
-    addCategory(formData);
-    toast.success('Catégorie ajoutée avec succès');
-    setFormData({ name: '', description: '' });
-    setShowForm(false);
+    setIsSubmitting(true);
+    try {
+      await addCategory(formData);
+      toast.success('Catégorie ajoutée avec succès');
+      setFormData({ name: '', description: '' });
+      setShowForm(false);
+    } catch (error) {
+      toast.error('Erreur lors de l\'ajout');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (deleteId) {
-      deleteCategory(deleteId);
-      setDeleteId(null);
-      toast.success('Catégorie supprimée avec succès');
+      setIsDeleting(true);
+      try {
+        await deleteCategory(deleteId);
+        setDeleteId(null);
+        toast.success('Catégorie supprimée avec succès');
+      } catch (error: any) {
+        toast.error(error.message || 'Erreur lors de la suppression');
+      } finally {
+        setIsDeleting(false);
+      }
     }
   };
 
@@ -106,8 +123,8 @@ export function Categories() {
               </div>
 
               <div className="flex gap-4">
-                <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
-                  Ajouter
+                <Button type="submit" className="bg-blue-600 hover:bg-blue-700" disabled={isSubmitting}>
+                  {isSubmitting ? 'Ajout...' : 'Ajouter'}
                 </Button>
                 <Button
                   type="button"
@@ -129,7 +146,7 @@ export function Categories() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {categories.map(category => {
           const itemCount = getCategoryItemCount(category.name);
-          
+
           return (
             <Card key={category.id}>
               <CardHeader>
@@ -185,9 +202,16 @@ export function Categories() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Annuler</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">
-              Supprimer
+            <AlertDialogCancel disabled={isDeleting}>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                handleDelete();
+              }}
+              className="bg-red-600 hover:bg-red-700"
+              disabled={isDeleting}
+            >
+              {isDeleting ? 'Suppression...' : 'Supprimer'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

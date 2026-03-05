@@ -1,4 +1,16 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { db } from '../firebase';
+import {
+    collection,
+    onSnapshot,
+    doc,
+    setDoc,
+    updateDoc,
+    deleteDoc,
+    getDocs,
+    query,
+    where
+} from 'firebase/firestore';
 
 export type UserRole = 'admin' | 'cashier' | 'manager';
 
@@ -12,23 +24,19 @@ export interface User {
 interface AuthContextType {
     user: User | null;
     users: User[];
-    login: (username: string, password: string) => boolean;
+    login: (username: string, password: string) => Promise<boolean>;
     logout: () => void;
     isAuthenticated: boolean;
     hasRole: (roles: UserRole[]) => boolean;
-    addUser: (user: User) => void;
-    updateUser: (username: string, updates: Partial<User>) => void;
-    deleteUser: (username: string) => void;
+    addUser: (user: User) => Promise<void>;
+    updateUser: (username: string, updates: Partial<User>) => Promise<void>;
+    deleteUser: (username: string) => Promise<void>;
+    isLoading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const STORAGE_KEY_AUTH = 'store_auth_user';
-const STORAGE_KEY_USERS = 'store_users';
-
-const defaultUsers: User[] = [
-    { username: 'admin', role: 'admin', name: 'Administrateur', password: 'admin123' }
-];
 
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(() => {
@@ -36,11 +44,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return stored ? JSON.parse(stored) : null;
     });
 
-    const [users, setUsers] = useState<User[]>(() => {
-        const stored = localStorage.getItem(STORAGE_KEY_USERS);
-        return stored ? JSON.parse(stored) : defaultUsers;
-    });
+    const [users, setUsers] = useState<User[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
 
+    // Écouter les utilisateurs en temps réel
+    useEffect(() => {
+        const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
+            const usersList: User[] = [];
+            snapshot.forEach((doc) => {
+                usersList.push(doc.data() as User);
+            });
+
+            // Si la base est vide (premier lancement), on crée l'admin par défaut
+            if (usersList.length === 0) {
+                const defaultAdmin: User = {
+                    username: 'admin',
+                    role: 'admin',
+                    name: 'Administrateur',
+                    password: 'admin123'
+                };
+                setDoc(doc(db, 'users', 'admin'), defaultAdmin);
+            }
+
+            setUsers(usersList);
+            setIsLoading(false);
+        });
+
+        return () => unsubscribe();
+    }, []);
+
+    // Persister la session locale (pour éviter de se reconnecter à chaque refresh)
     useEffect(() => {
         if (user) {
             localStorage.setItem(STORAGE_KEY_AUTH, JSON.stringify(user));
@@ -49,17 +82,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     }, [user]);
 
-    useEffect(() => {
-        localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(users));
-    }, [users]);
-
-    const login = (username: string, password: string): boolean => {
+    const login = async (username: string, password: string): Promise<boolean> => {
         const foundUser = users.find(u => u.username === username && u.password === password);
         if (foundUser) {
-            // Ne pas stocker le password dans la session pour plus de sécurité (simulée)
             const sessionUser = { ...foundUser };
             delete sessionUser.password;
-            setUser(foundUser);
+            setUser(sessionUser);
             return true;
         }
         return false;
@@ -75,22 +103,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return allowedRoles.includes(user.role);
     };
 
-    const addUser = (newUser: User) => {
-        if (users.find(u => u.username === newUser.username)) return;
-        setUsers([...users, newUser]);
+    const addUser = async (newUser: User) => {
+        // On utilise l'username comme ID de document
+        await setDoc(doc(db, 'users', newUser.username), newUser);
     };
 
-    const updateUser = (username: string, updates: Partial<User>) => {
-        setUsers(users.map(u => u.username === username ? { ...u, ...updates } : u));
-        // Si l'utilisateur mis à jour est celui connecté, mettre à jour la session
+    const updateUser = async (username: string, updates: Partial<User>) => {
+        await updateDoc(doc(db, 'users', username), updates);
+
+        // Si l'utilisateur mis à jour est celui connecté, mettre à jour la session (sauf password)
         if (user?.username === username) {
-            setUser(prev => prev ? { ...prev, ...updates } : null);
+            const { password, ...sessionUpdates } = updates as any;
+            setUser(prev => prev ? { ...prev, ...sessionUpdates } : null);
         }
     };
 
-    const deleteUser = (username: string) => {
-        if (username === 'admin') return; // Sécurité : on ne supprime pas l'admin principal
-        setUsers(users.filter(u => u.username !== username));
+    const deleteUser = async (username: string) => {
+        if (username === 'admin') return;
+        await deleteDoc(doc(db, 'users', username));
     };
 
     return (
@@ -105,6 +135,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 addUser,
                 updateUser,
                 deleteUser,
+                isLoading
             }}
         >
             {children}

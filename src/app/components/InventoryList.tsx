@@ -30,12 +30,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from './ui/alert-dialog';
+import { toast } from 'sonner';
 
 export function InventoryList() {
-  const { items, categories, deleteItem } = useInventory();
+  const { items, categories, deleteItem, isLoading } = useInventory();
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const filteredItems = items.filter(item => {
     const matchesSearch =
@@ -48,12 +50,29 @@ export function InventoryList() {
     return matchesSearch && matchesCategory;
   });
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (deleteId) {
-      deleteItem(deleteId);
-      setDeleteId(null);
+      setIsDeleting(true);
+      try {
+        await deleteItem(deleteId);
+        toast.success('Article supprimé');
+        setDeleteId(null);
+      } catch (error) {
+        toast.error('Erreur lors de la suppression');
+      } finally {
+        setIsDeleting(false);
+      }
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
+        <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+        <p className="text-gray-500 dark:text-gray-400">Chargement de l'inventaire...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -182,9 +201,16 @@ export function InventoryList() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Annuler</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">
-              Supprimer
+            <AlertDialogCancel disabled={isDeleting}>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                handleDelete();
+              }}
+              className="bg-red-600 hover:bg-red-700"
+              disabled={isDeleting}
+            >
+              {isDeleting ? 'Suppression...' : 'Supprimer'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
